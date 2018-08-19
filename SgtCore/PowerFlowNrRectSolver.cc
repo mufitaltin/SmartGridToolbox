@@ -15,7 +15,6 @@
 #include "config.h"
 #include "Network.h"
 #include "PowerFlowNrRectSolver.h"
-#include "SparseHelper.h"
 #ifdef WITH_KLU
 #include "KluSolver.h"
 #endif
@@ -394,9 +393,9 @@ namespace Sgt
 
         Jacobian J(mod_->nPq(), mod_->nPv());
 
-        SparseHelper<Complex> hVr(mod_->nPqPv(), mod_->nPqPv(), true, true, true);
-        SparseHelper<Complex> hVi(mod_->nPqPv(), mod_->nPqPv(), true, true, true);
-        SparseHelper<Complex> hQg(mod_->nPv(), mod_->nPv(), true, true, true);
+        SpMat<Complex> hVr(mod_->nPqPv(), mod_->nPqPv());
+        SpMat<Complex> hVi(mod_->nPqPv(), mod_->nPqPv());
+        SpMat<Complex> hQg(mod_->nPv(), mod_->nPv());
 
         for (auto it = SConstPqPv.begin(); it != SConstPqPv.end(); ++it)
         {
@@ -412,34 +411,34 @@ namespace Sgt
             Complex x = conj(static_cast<Complex>(*it) / (Vik * Vik));
             Complex imX = im * x;
 
-            hVr.insert(i, i, x);
-            hVi.insert(i, i, -imX);
-            hVr.insert(i, k, -x);
-            hVr.insert(i, k, imX);
+            hVr(i, i) += x;
+            hVi(i, i) += -imX;
+            hVr(i, k) += -x;
+            hVr(i, k) += imX;
         }
 
         for (uword i = 0; i < mod_->nPq(); ++i)
         {
             uword iPq = mod_->iPq(i);
             Complex x = conj(static_cast<Complex>(Scg(iPq)) / (V(iPq) * V(iPq)));
-            hVr.insert(iPq, iPq, -x);
-            hVi.insert(iPq, iPq, im * x);
+            hVr(iPq, iPq) += -x;
+            hVi(iPq, iPq) += im * x;
         }
 
         for (uword i = 0; i < mod_->nPv(); ++i)
         {
             uword iPv = mod_->iPv(i);
             Complex x = conj(Scg(iPv)) / M2PvSetpt(i);
-            hVr.insert(iPv, iPv, x);
-            hVi.insert(iPv, iPv, im * x);
-            hQg.insert(i, i, -im * V(iPv) / M2PvSetpt(i));
+            hVr(iPv, iPv) += x;
+            hVi(iPv, iPv) += im * x;
+            hQg(i, i) += -im * V(iPv) / M2PvSetpt(i);
         }
 
         for (auto it = YConstPqPv.begin(); it != YConstPqPv.end(); ++it)
         {
             Complex x = -static_cast<Complex>(*it);
-            hVr.insert(it.row(), it.col(), x);
-            hVi.insert(it.row(), it.col(), im * x);
+            hVr(it.row(), it.col()) += x;
+            hVi(it.row(), it.col()) += im * x;
         }
 
         for (auto it = IConstPqPv.begin(); it != IConstPqPv.end(); ++it)
@@ -453,17 +452,17 @@ namespace Sgt
 
             Complex x = static_cast<Complex>(*it) * (-M2ik + real(Vik) * Vik) / M3ik;
             Complex imX = im * x;
-            hVr.insert(i, i, x);
-            hVi.insert(i, i, imX);
+            hVr(i, i) += x;
+            hVi(i, i) += imX;
             if (i != k)
             {
-                hVr.insert(i, k, -x);
-                hVi.insert(i, k, -imX);
+                hVr(i, k) += -x;
+                hVi(i, k) += -imX;
             }
         }
-        J.dDdVr = hVr.get();
-        J.dDdVi = hVi.get();
-        J.dDPvdQPv = hQg.get();
+        J.dDdVr = hVr;
+        J.dDdVi = hVi;
+        J.dDPvdQPv = hQg;
 
         return J;
     }
@@ -509,7 +508,7 @@ namespace Sgt
 
     SpMat<double> PowerFlowNrRectSolver::constructJMatrix(const Jacobian& J) const
     {
-        SparseHelper<double> h(nVar(), nVar(), true, true, true);
+        SpMat<double> h(nVar(), nVar());
 
         auto insert = [&](const auto& JSel, const auto& indDim1R, const auto& indDim1I, const auto& indDim2)
         {
@@ -518,8 +517,8 @@ namespace Sgt
                 uword i = it.row(); 
                 uword k = it.col(); 
                 Complex x = *it;
-                h.insert(indDim1R(i), indDim2(k), real(x));
-                h.insert(indDim1I(i), indDim2(k), imag(x));
+                h(indDim1R(i), indDim2(k)) += real(x);
+                h(indDim1I(i), indDim2(k)) += imag(x);
             }
         };
        
@@ -535,7 +534,7 @@ namespace Sgt
                    selVrOrQFrom_x_(mod_->selPv())); // Q PV.
         }
 
-        return h.get();
+        return h;
     }
             
     Col<Complex> PowerFlowNrRectSolver::calcSGenSl(const Col<Complex>& V, const Col<double>& M)

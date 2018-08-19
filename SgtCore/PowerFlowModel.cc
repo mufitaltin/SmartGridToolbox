@@ -14,8 +14,6 @@
 
 #include "PowerFlowModel.h"
 
-#include "SparseHelper.h"
-
 #include <iostream>
 #include <sstream>
 
@@ -138,9 +136,9 @@ namespace Sgt
 
         std::size_t nNode = nodeVec_.size();
 
-        SparseHelper<Complex> YConstHelper(nNode, nNode, true, true, true);
-        SparseHelper<Complex> IConstHelper(nNode, nNode, true, true, true);
-        SparseHelper<Complex> SConstHelper(nNode, nNode, true, true, true);
+        YConst_ = SpMat<Complex>(nNode, nNode);
+        IConst_ = SpMat<Complex>(nNode, nNode);
+        SConst_ = SpMat<Complex>(nNode, nNode);
 
         for (auto& bus : busVec_)
         {
@@ -149,20 +147,20 @@ namespace Sgt
                 const auto& ndI = bus->nodeVec_[iPh];
                 auto iNd = ndI->idx_;
                     
-                YConstHelper.insert(iNd, iNd, bus->YConst_(iPh, iPh)); // NOTE: filters out zeros.
-                IConstHelper.insert(iNd, iNd, bus->IConst_(iPh, iPh)); // NOTE: filters out zeros.
-                SConstHelper.insert(iNd, iNd, bus->SConst_(iPh, iPh)); // NOTE: filters out zeros.
+                YConst_(iNd, iNd) += bus->YConst_(iPh, iPh); // NOTE: filters out zeros.
+                IConst_(iNd, iNd) += bus->IConst_(iPh, iPh); // NOTE: filters out zeros.
+                SConst_(iNd, iNd) += bus->SConst_(iPh, iPh); // NOTE: filters out zeros.
 
                 for (std::size_t jPh = iPh + 1; jPh < bus->phases_.size(); ++jPh)
                 {
                     const auto& ndJ = bus->nodeVec_[jPh];
                     auto jNd = ndJ->idx_;
-                    YConstHelper.insert(iNd, jNd, bus->YConst_(iPh, jPh)); // NOTE: filters out zeros.
-                    IConstHelper.insert(iNd, jNd, bus->IConst_(iPh, jPh)); // NOTE: filters out zeros.
-                    SConstHelper.insert(iNd, jNd, bus->SConst_(iPh, jPh)); // NOTE: filters out zeros.
-                    YConstHelper.insert(jNd, iNd, bus->YConst_(iPh, jPh)); // NOTE: filters out zeros.
-                    IConstHelper.insert(jNd, iNd, bus->IConst_(iPh, jPh)); // NOTE: filters out zeros.
-                    SConstHelper.insert(jNd, iNd, bus->SConst_(iPh, jPh)); // NOTE: filters out zeros.
+                    YConst_(iNd, jNd) += bus->YConst_(iPh, jPh); // NOTE: filters out zeros.
+                    IConst_(iNd, jNd) += bus->IConst_(iPh, jPh); // NOTE: filters out zeros.
+                    SConst_(iNd, jNd) += bus->SConst_(iPh, jPh); // NOTE: filters out zeros.
+                    YConst_(jNd, iNd) += bus->YConst_(iPh, jPh); // NOTE: filters out zeros.
+                    IConst_(jNd, iNd) += bus->IConst_(iPh, jPh); // NOTE: filters out zeros.
+                    SConst_(jNd, iNd) += bus->SConst_(iPh, jPh); // NOTE: filters out zeros.
                 }
             }
         }
@@ -192,7 +190,7 @@ namespace Sgt
                 std::size_t idxNodeI = nodeI->idx_;
 
                 // Only count each diagonal element in branch->YConst_ once!
-                YConstHelper.insert(idxNodeI, idxNodeI, branch->YConst_(i, i));
+                YConst_(idxNodeI, idxNodeI) += branch->YConst_(i, i);
 
                 for (uword k = i + 1; k < nTerm; ++k)
                 {
@@ -205,15 +203,11 @@ namespace Sgt
                     const PfNode* nodeK = busK->nodeVec_[busPhaseIdxK].get();
                     std::size_t idxNodeK = nodeK->idx_;
 
-                    YConstHelper.insert(idxNodeI, idxNodeK, branch->YConst_(i, k));
-                    YConstHelper.insert(idxNodeK, idxNodeI, branch->YConst_(k, i));
+                    YConst_(idxNodeI, idxNodeK) += branch->YConst_(i, k);
+                    YConst_(idxNodeK, idxNodeI) += branch->YConst_(k, i);
                 }
             }
         } // Loop over branches.
-
-        YConst_ = YConstHelper.get();
-        IConst_ = IConstHelper.get();
-        SConst_ = SConstHelper.get();
 
         sgtLogDebug() << "YConst_.nnz() = " << YConst_.n_nonzero << std::endl;
         sgtLogDebug() << "IConst_.nnz() = " << IConst_.n_nonzero << std::endl;

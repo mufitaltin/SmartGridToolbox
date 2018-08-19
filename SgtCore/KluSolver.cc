@@ -25,14 +25,24 @@ bool kluSolve(const arma::SpMat<double>& a, const arma::Col<double>& b, arma::Co
     auto n = b.size();
     auto nnz = a.n_nonzero;
 
-    int* ap = new int[n + 1];
-    for (unsigned int i = 0; i <= n; ++i) ap[i] = static_cast<int>(a.col_ptrs[i]);
-
+    int* ap = new int[n + 1]; for (size_t i = 0; i <= n; ++i) ap[i] = static_cast<int>(nnz);
+    // TODO: Normally all but last element will get overwritten - but if not, is nnz OK / correct?
     int* ai = new int[nnz];
-    for (unsigned int i = 0; i < nnz; ++i) ai[i] = static_cast<int>(a.row_indices[i]);
-
     double* ax = new double[nnz];
-    for (unsigned int i = 0; i < nnz; ++i) ax[i] = a.values[i];
+    uword prevCol = n; // Force first element to be added to ap.
+    uword nCol = 0; // Number of entries in ap.
+    uword iNz = 0;
+    for (auto x = a.begin(); x != a.end(); ++x, ++iNz)
+    {
+        ax[iNz] = *x;
+        ai[iNz] = static_cast<int>(x.row());
+        if (x.col() != prevCol)
+        {
+            prevCol = x.col();
+            ap[nCol] = static_cast<int>(iNz);
+            nCol += 1;
+        }
+    }
 
     double* b1 = new double[n];
     for (unsigned int i = 0; i < n; ++i) b1[i] = b(i);
