@@ -393,10 +393,6 @@ namespace Sgt
 
         Jacobian J(mod_->nPq(), mod_->nPv());
 
-        SpMat<Complex> hVr(mod_->nPqPv(), mod_->nPqPv());
-        SpMat<Complex> hVi(mod_->nPqPv(), mod_->nPqPv());
-        SpMat<Complex> hQg(mod_->nPv(), mod_->nPv());
-
         for (auto it = SConstPqPv.begin(); it != SConstPqPv.end(); ++it)
         {
             uword i = it.row();
@@ -411,34 +407,34 @@ namespace Sgt
             Complex x = conj(static_cast<Complex>(*it) / (Vik * Vik));
             Complex imX = im * x;
 
-            hVr(i, i) += x;
-            hVi(i, i) += -imX;
-            hVr(i, k) += -x;
-            hVr(i, k) += imX;
+            J.dDdVr(i, i) += x;
+            J.dDdVi(i, i) += -imX;
+            J.dDdVr(i, k) += -x;
+            J.dDdVr(i, k) += imX;
         }
 
         for (uword i = 0; i < mod_->nPq(); ++i)
         {
             uword iPq = mod_->iPq(i);
             Complex x = conj(static_cast<Complex>(Scg(iPq)) / (V(iPq) * V(iPq)));
-            hVr(iPq, iPq) += -x;
-            hVi(iPq, iPq) += im * x;
+            J.dDdVr(iPq, iPq) += -x;
+            J.dDdVi(iPq, iPq) += im * x;
         }
 
         for (uword i = 0; i < mod_->nPv(); ++i)
         {
             uword iPv = mod_->iPv(i);
             Complex x = conj(Scg(iPv)) / M2PvSetpt(i);
-            hVr(iPv, iPv) += x;
-            hVi(iPv, iPv) += im * x;
-            hQg(i, i) += -im * V(iPv) / M2PvSetpt(i);
+            J.dDdVr(iPv, iPv) += x;
+            J.dDdVi(iPv, iPv) += im * x;
+            J.dDPvdQPv(i, i) += -im * V(iPv) / M2PvSetpt(i);
         }
 
         for (auto it = YConstPqPv.begin(); it != YConstPqPv.end(); ++it)
         {
             Complex x = -static_cast<Complex>(*it);
-            hVr(it.row(), it.col()) += x;
-            hVi(it.row(), it.col()) += im * x;
+            J.dDdVr(it.row(), it.col()) += x;
+            J.dDdVi(it.row(), it.col()) += im * x;
         }
 
         for (auto it = IConstPqPv.begin(); it != IConstPqPv.end(); ++it)
@@ -452,17 +448,14 @@ namespace Sgt
 
             Complex x = static_cast<Complex>(*it) * (-M2ik + real(Vik) * Vik) / M3ik;
             Complex imX = im * x;
-            hVr(i, i) += x;
-            hVi(i, i) += imX;
+            J.dDdVr(i, i) += x;
+            J.dDdVi(i, i) += imX;
             if (i != k)
             {
-                hVr(i, k) += -x;
-                hVi(i, k) += -imX;
+                J.dDdVr(i, k) += -x;
+                J.dDdVi(i, k) += -imX;
             }
         }
-        J.dDdVr = hVr;
-        J.dDdVi = hVi;
-        J.dDPvdQPv = hQg;
 
         return J;
     }
